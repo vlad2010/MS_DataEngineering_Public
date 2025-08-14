@@ -23,6 +23,9 @@ g_st = Stat()
 # models statistics for sharings
 g_models = dict()
 
+# language statistics for models
+g_models_lang = dict()
+
 def load_json(file_path):
     """
     Loads a JSON file and returns its content.
@@ -86,33 +89,20 @@ def load_all_files(fileNames):
         devGPT[filePath] = json_data
     return devGPT 
 
-def display_lang_stat(lstat, st, models):
-    print(f"Language statistics collection size: {len(lstat)}")
-    sorted_lang = sorted(lstat.items(), key=lambda item: item[1], reverse=True)
-
-    for lang, lnum in sorted_lang:
-        if lnum > 50:
-            print(f"[{lang}] - [{lnum}]")
-
-    print(f"Models statistics collection size: {len(models)}")
-    sorted_models = sorted(models.items(), key=lambda item: item[1], reverse=True)
-
-    total_md = 0
-    for md, mdnum in sorted_models:
-        print(f"[{md}] - [{mdnum}]")
-        total_md = total_md + mdnum
-
-    print(f"\nTotal number of models: {total_md}")
-    printStat(st)
-
 def get_value_with_check(data, property_name, default_value):
     value = default_value
     if property_name in data:
         value = data[property_name]
     return value
 
+
+def update_model_language_stats(store: dict, model: str, lang: str) -> dict:
+    modeldata = store.setdefault(model, {})
+    modeldata[lang] = modeldata.get(lang, 0) + 1
+    return store
+
 def process_data(dt):
-    global g_st, g_langs, g_models
+    global g_st, g_langs, g_models, g_models_lang
 
     for d in dt:
         # print(f"\n --- File: {d} ---")
@@ -142,6 +132,10 @@ def process_data(dt):
                 g_st.conversations += len(conversations)
 
                 model = get_value_with_check(sharing,"Model", "Unknown")
+
+                if "GPT-4" in model:
+                    model = "GPT-4"
+
                 # print(f"Model : {model}")
                 if model in g_models:
                     g_models[model] = g_models[model] + 1
@@ -183,14 +177,51 @@ def process_data(dt):
                             else:
                                 g_langs[lang] = 1
 
+                        # now update language statistics for models
+                        g_models_lang = update_model_language_stats(g_models_lang, model, lang)
+
         # print(f"For file {d}: data type is: {firstType}")
 
-def printStat(st):
+def print_model_language_stats(models_lang):
+
+    print("\nLanguage statistics for models:")
+    for model, model_data in models_lang.items():
+        print(f"Model: {model}")
+
+        sorted_data = sorted(model_data.items(), key=lambda item: item[1], reverse=True)
+        for lang, lnum in sorted_data:
+            if lnum > 40:
+                print(f"\t[{lang}] - [{lnum}]");
+
+
+def print_general_stat(st):
     print(f"Code statistics: code_items:[{st.code_items}] in conversations: [{st.conversations}] in sharings: [{st.sharings}] in sources: [{st.sources}] in json files:[{st.files}]")
+
+def display_lang_stat(lstat, st, models):
+    print(f"Language statistics collection size: {len(lstat)}")
+    sorted_lang = sorted(lstat.items(), key=lambda item: item[1], reverse=True)
+
+    for lang, lnum in sorted_lang:
+        if lnum > 50:
+            print(f"[{lang}] - [{lnum}]")
+
+    print(f"\nSharings for each model. Number of models: {len(models)}")
+    sorted_models = sorted(models.items(), key=lambda item: item[1], reverse=True)
+
+    total_md = 0
+    for md, mdnum in sorted_models:
+        print(f"[{md}] - [{mdnum}]")
+        total_md = total_md + mdnum
+
+    print(f"Total number of sharings: {total_md}")
+
+    print_model_language_stats(g_models_lang)
+
+    print_general_stat(st)
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description="Scan all supported files using scanners ")
-    parser.add_argument("--dataset_folder", required=True, type=str, help="Path to DevGPT spanshot folder")
+    parser.add_argument("--dataset_folder", required=True, type=str, help="Path to DevGPT snapshot folder")
     return parser.parse_args()
 
 def main():
