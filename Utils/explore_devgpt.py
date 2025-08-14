@@ -1,11 +1,10 @@
+#!/usr/bin/env python3
 import json
 import sys
+import os
 import time
 from dataclasses import dataclass
-
-BASEFOLDER="d:\\GitHub\\DevGPT\\snapshot_20231012\\"
-FILES=["20231012_230826_commit_sharings.json", "20231012_232232_hn_sharings.json", "20231012_233628_pr_sharings.json", "20231012_234250_file_sharings.json", "20231012_235128_issue_sharings.json", "20231012_235320_discussion_sharings.json"]
-# FILES=["20231012_232232_hn_sharings.json"]
+import argparse
 
 SUPPORTED_LANGUAGES=["C", "C++", "Java", "Python", "C#", "Swift"]
 
@@ -19,9 +18,10 @@ class Stat:
 
 g_langs = dict()
 g_code_folder = "Code"
-
 g_st = Stat()
 
+# models statistics for sharings
+g_models = dict()
 
 def load_json(file_path):
     """
@@ -34,10 +34,9 @@ def load_json(file_path):
     try:
         with open(file_path, 'r', encoding='utf-8') as file:
             start = time.process_time()
-            print(f"Started loading file: {file_path}")
+            # print(f"Started loading file: {file_path}")
             elapsed = time.process_time() - start
-            print(elapsed)
-            print(f"Time elapsed: {elapsed}")
+            # print(f"Time elapsed: {elapsed}")
             data = json.load(file)
             return data
     except FileNotFoundError:
@@ -45,6 +44,20 @@ def load_json(file_path):
     except json.JSONDecodeError:
         print("Error decoding the JSON file.")
     return None
+
+def get_json_files(folder_path):
+    """
+    Returns a list of all JSON file paths in the specified folder.
+    """
+    if not os.path.isdir(folder_path):
+        raise ValueError(f"Provided path is not a valid directory: {folder_path}")
+
+    return [
+        os.path.join(folder_path, file)
+        for file in os.listdir(folder_path)
+        if file.lower().endswith(".json") and os.path.isfile(os.path.join(folder_path, file))
+    ]
+
 #
 # def print_data_structure(data, indent=0):
 #     """
@@ -67,21 +80,29 @@ def load_json(file_path):
 
 def load_all_files(fileNames):
     devGPT = dict()
-    for f in FILES:
-        fullName = BASEFOLDER + f 
-        print(f"Current file is: {fullName}")
-        json_data = load_json(fullName)
-        devGPT[f] = json_data
+    for filePath in fileNames:
+        # print(f"Current file is: {filePath}")
+        json_data = load_json(filePath)
+        devGPT[filePath] = json_data
     return devGPT 
 
-def display_lang_stat(lstat, st):
-    print(f"language statistics collection size: {len(lstat)}")
+def display_lang_stat(lstat, st, models):
+    print(f"Language statistics collection size: {len(lstat)}")
     sorted_lang = sorted(lstat.items(), key=lambda item: item[1], reverse=True)
 
     for lang, lnum in sorted_lang:
-        # lnum = sorted_lang[lang]
-        print(f"[{lang}] - [{lnum}]")
+        if lnum > 50:
+            print(f"[{lang}] - [{lnum}]")
 
+    print(f"Models statistics collection size: {len(models)}")
+    sorted_models = sorted(models.items(), key=lambda item: item[1], reverse=True)
+
+    total_md = 0
+    for md, mdnum in sorted_models:
+        print(f"[{md}] - [{mdnum}]")
+        total_md = total_md + mdnum
+
+    print(f"\nTotal number of models: {total_md}")
     printStat(st)
 
 def get_value_with_check(data, property_name, default_value):
@@ -91,18 +112,18 @@ def get_value_with_check(data, property_name, default_value):
     return value
 
 def process_data(dt):
-    global g_st, g_langs
+    global g_st, g_langs, g_models
 
     for d in dt:
-        print(f"\n --- File: {d} ---")
+        # print(f"\n --- File: {d} ---")
         src = dt[d]["Sources"]
 
         g_st.sources += len(src)
-        print(f"File name: {d}   Sources len : {len(src)}")
+        # print(f"File name: {d}   Sources len : {len(src)}")
 
         # now in sources
         firstType = src[0]["Type"]
-        print(f"Expected data type for file: {firstType}")
+        # print(f"Expected data type for file: {firstType}")
 
         for source_item in src:
 
@@ -119,6 +140,13 @@ def process_data(dt):
                     continue
 
                 g_st.conversations += len(conversations)
+
+                model = get_value_with_check(sharing,"Model", "Unknown")
+                # print(f"Model : {model}")
+                if model in g_models:
+                    g_models[model] = g_models[model] + 1
+                else:
+                    g_models[model] = 1
 
                 for conversation in conversations:
 
@@ -155,20 +183,34 @@ def process_data(dt):
                             else:
                                 g_langs[lang] = 1
 
-        print(f"For file {d}: data type is: {firstType}")
+        # print(f"For file {d}: data type is: {firstType}")
 
 def printStat(st):
-    print(f"Code statistics: code_items:{st.code_items} in conversations: {st.conversations} in sharings: {st.sharings} in sources: {st.sources} in files:{st.files}")
+    print(f"Code statistics: code_items:[{st.code_items}] in conversations: [{st.conversations}] in sharings: [{st.sharings}] in sources: [{st.sources}] in json files:[{st.files}]")
+
+def parse_arguments():
+    parser = argparse.ArgumentParser(description="Scan all supported files using scanners ")
+    parser.add_argument("--dataset_folder", required=True, type=str, help="Path to DevGPT spanshot folder")
+    return parser.parse_args()
 
 def main():
-    global g_langs, g_st
-    dt = load_all_files(FILES)
-    print(f"Files loaded: {len(dt)}")
+    global g_langs, g_st, g_models
+    args = parse_arguments()
+
+    print(f"Dataset folder: {args.dataset_folder}")
+    json_files = get_json_files(args.dataset_folder)
+
+    g_st.files = len(json_files)
+
+    print(f"Json files loaded: [{len(json_files)}] :: {json_files}  ")
+
+    dt = load_all_files(json_files)
+    # print(f"Files loaded: {len(dt)}")
 
     process_data(dt)
 
     print("\nGlobal language statistics:")
-    display_lang_stat(g_langs, g_st)
+    display_lang_stat(g_langs, g_st, g_models)
 
 if __name__ == "__main__":
     main()
