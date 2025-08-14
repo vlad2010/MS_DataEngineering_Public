@@ -211,6 +211,7 @@ def main():
 
     print("\nGlobal language statistics:")
     display_lang_stat(g_langs, g_st, g_models)
+    print("-----")
 
 if __name__ == "__main__":
     main()
